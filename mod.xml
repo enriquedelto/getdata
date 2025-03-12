@@ -1,0 +1,9 @@
+<Mod
+    name="Extract Player Info"
+    description="Extrae información de la partida actual: varitas, spells y perks. Ideal para depurar o crear herramientas externas."
+    author="KAIKE"
+    version="1.0"
+    request_no_api_restrictions="0"
+>
+    <Script file="init.lua" />
+</Mod>
