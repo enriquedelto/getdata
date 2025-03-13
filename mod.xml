@@ -1,6 +1,6 @@
 <Mod
     name="Extract Player Info"
-    description="Extrae información de la partida actual: varitas, spells y perks. Ideal para depurar o crear herramientas externas."
+    description="Extrae información de la varita activa al pulsar la tecla G."
     author="KAIKE"
     version="1.0"
     request_no_api_restrictions="0">
