@@ -118,9 +118,8 @@ end
 -- Escribe la información extraída en un archivo, usando la función de file_util.
 local function export_info(info)
     local file_path = "mods/getdata/files/player_info.txt"
-    if file_util.ModTextFileGetContent then
-        -- Se usa directamente la función expuesta en file_util
-        file_util.ModTextFileGetContent(file_path, info)  -- Nota: se asume que esta función actúa como escritura.
+    if file_util.ModTextFileSetContent then
+        file_util.ModTextFileSetContent(file_path, info)
         GamePrint("Datos guardados en: " .. file_path)
     else
         GamePrint("[ERROR] No se pudo escribir el archivo.")
