@@ -1,13 +1,36 @@
--- Verify mod loading with debug message
-print("GetData mod loading...")
-GamePrint("GetData mod loading...")
 -- init.lua
 
--- Use relative paths for importing
-dofile_once("files/helper.lua")
-dofile_once("files/wand_spell_helper.lua")
+-- Mensajes de verificación de carga del mod
+print("DEBUG: GetData mod loading...")
+GamePrint("DEBUG: GetData mod loading...")
 
--- Definimos la tecla de extracción. En este ejemplo se utiliza el código 10, que corresponde a la tecla G.
+-- Usamos rutas relativas (esto es correcto según tu estructura)
+dofile_once("files/helper.lua")
+print("DEBUG: helper.lua loaded")
+dofile_once("files/wand_spell_helper.lua")
+print("DEBUG: wand_spell_helper.lua loaded")
+
+-- Verify functions are properly loaded
+if type(get_all_wands) ~= "function" then
+    print("ERROR: get_all_wands not loaded properly")
+end
+if type(read_wand) ~= "function" then
+    print("ERROR: read_wand not loaded properly")
+end
+if type(get_all_spells) ~= "function" then
+    print("ERROR: get_all_spells not loaded properly")
+end
+if type(read_spell) ~= "function" then
+    print("ERROR: read_spell not loaded properly")
+end
+
+-- Verify functions are available
+print("DEBUG: get_all_wands is " .. tostring(type(get_all_wands)))
+print("DEBUG: read_wand is " .. tostring(type(read_wand)))
+print("DEBUG: get_all_spells is " .. tostring(type(get_all_spells)))
+print("DEBUG: read_spell is " .. tostring(type(read_spell)))
+
+-- Definimos la tecla de extracción (código 10 = tecla G)
 local KEY_G = 10
 local extraction_key_down = false
 
@@ -15,7 +38,6 @@ local extraction_key_down = false
 function extract_player_info()
   local info = "=== Varitas activas ===\n"
   
-  -- Se obtienen las varitas del inventario rápido (suponiendo que allí se encuentran las varitas equipadas)
   local player_wands = get_all_wands()
   for slot, wand_entity in pairs(player_wands) do
     local wand_data = read_wand(wand_entity)
@@ -27,7 +49,6 @@ function extract_player_info()
   end
   
   info = info .. "=== Hechizos en inventario ===\n"
-  -- Se obtienen todos los hechizos del inventario completo
   local spells = get_all_spells()
   for i, spell_entity in ipairs(spells) do
     local spell_id = read_spell(spell_entity)
@@ -37,88 +58,108 @@ function extract_player_info()
   return info
 end
 
--- Función para “copiar” el texto al portapapeles.
--- En este ejemplo se simula copiándolo al imprimirlo, pero podrías reemplazarla por una función que interactúe con el sistema.
+-- Función para "copiar" el texto al portapapeles con mensajes de debug
 function SetClipboard(text)
-  -- Mantener la impresión en el juego para feedback
-  GamePrint("----- INFORMACIÓN COPIADA AL PORTAPAPELES -----\n" .. text)
+  print("DEBUG: Entering SetClipboard")
+  GamePrint("DEBUG: Entering SetClipboard")
+  print("DEBUG: Text length: " .. tostring(#text))
+  print("DEBUG: Text snippet: " .. string.sub(text, 1, 100))
   
-  -- Usar LuaJIT FFI para acceder a la API de Windows
-  local ffi = require("ffi")
+  -- Intentamos cargar FFI
+  local success, ffi = pcall(require, "ffi")
+  if not success then
+    print("DEBUG: Failed to require ffi")
+    GamePrint("DEBUG: Failed to require ffi")
+    return
+  else
+    print("DEBUG: ffi loaded successfully")
+  end
   
   ffi.cdef[[
     int OpenClipboard(void*);
+    int EmptyClipboard(void);
     void* GlobalAlloc(uint32_t, size_t);
     void* GlobalLock(void*);
-    void GlobalUnlock(void*);
+    int GlobalUnlock(void*);
     void* SetClipboardData(uint32_t, void*);
-    void CloseClipboard(void);
-    int EmptyClipboard(void);
+    int CloseClipboard(void);
   ]]
   
-  -- Constantes de Windows
   local GMEM_MOVEABLE = 0x0002
   local CF_TEXT = 1
   
-  -- Abrir el portapapeles
-  if ffi.C.OpenClipboard(nil) ~= 0 then
-    -- Limpiar el contenido actual
-    ffi.C.EmptyClipboard()
-    
-    -- Alojar memoria para el texto
-    local text_len = #text + 1  -- +1 para el null terminator
-    local hmem = ffi.C.GlobalAlloc(GMEM_MOVEABLE, text_len)
-    if hmem ~= nil then
-      -- Copiar el texto a la memoria
-      local mem = ffi.C.GlobalLock(hmem)
-      if mem ~= nil then
-        ffi.copy(mem, text, text_len)
-        ffi.C.GlobalUnlock(hmem)
-        
-        -- Establecer los datos en el portapapeles
-        ffi.C.SetClipboardData(CF_TEXT, hmem)
-      end
-    end
-    
-    -- Cerrar el portapapeles
-    ffi.C.CloseClipboard()
+  local openRes = ffi.C.OpenClipboard(nil)
+  print("DEBUG: OpenClipboard result: " .. tostring(openRes))
+  if openRes == 0 then
+    print("DEBUG: OpenClipboard failed")
+    GamePrint("DEBUG: OpenClipboard failed")
+    return
   end
+  print("DEBUG: Clipboard opened")
+  
+  ffi.C.EmptyClipboard()
+  print("DEBUG: Clipboard emptied")
+  
+  local text_len = #text + 1 -- +1 para el terminador nulo
+  print("DEBUG: Allocating memory for length: " .. tostring(text_len))
+  local hmem = ffi.C.GlobalAlloc(GMEM_MOVEABLE, text_len)
+  if hmem == nil then
+    print("DEBUG: GlobalAlloc failed")
+    GamePrint("DEBUG: GlobalAlloc failed")
+    ffi.C.CloseClipboard()
+    return
+  end
+  print("DEBUG: Memory allocated: " .. tostring(hmem))
+  
+  local mem = ffi.C.GlobalLock(hmem)
+  if mem == nil then
+    print("DEBUG: GlobalLock failed")
+    GamePrint("DEBUG: GlobalLock failed")
+    ffi.C.CloseClipboard()
+    return
+  end
+  print("DEBUG: Memory locked: " .. tostring(mem))
+  
+  ffi.copy(mem, text, text_len)
+  print("DEBUG: Text copied to memory")
+  
+  ffi.C.GlobalUnlock(hmem)
+  print("DEBUG: Memory unlocked")
+  
+  local setRes = ffi.C.SetClipboardData(CF_TEXT, hmem)
+  print("DEBUG: SetClipboardData result: " .. tostring(setRes))
+  
+  ffi.C.CloseClipboard()
+  print("DEBUG: Clipboard closed")
+  
+  GamePrint("----- INFORMACIÓN COPIADA AL PORTAPAPELES -----\n" .. text)
 end
 
--- Función que se llama cada frame y verifica si se ha pulsado la tecla G.
+-- Función de actualización del mundo con mensajes de depuración
 function OnWorldPostUpdate()
-  -- Debug message to verify callback execution
-  if GameGetFrameNum() % 60 == 0 then
-    print("GetData mod running...")
+  local frame = GameGetFrameNum()
+  if frame % 60 == 0 then
+    print("DEBUG: OnWorldPostUpdate, frame: " .. tostring(frame))
   end
-
-  local is_pressed = InputIsKeyDown(KEY_G)
   
-  -- Si se detecta la pulsación y aún no se ha procesado la extracción en este ciclo
+  local is_pressed = InputIsKeyDown(KEY_G)
+  if is_pressed then
+    print("DEBUG: KEY_G is pressed")
+  end
+  
   if is_pressed and not extraction_key_down then
     extraction_key_down = true
+    print("DEBUG: Extraction triggered")
     local info = extract_player_info()
+    print("DEBUG: Extracted info (first 100 chars): " .. string.sub(info, 1, 100))
     SetClipboard(info)
-    print("Información del jugador extraída y copiada al portapapeles.")
+    print("DEBUG: SetClipboard called")
   end
-
-  -- Cuando se suelta la tecla, se reinicia la bandera para permitir futuras extracciones.
+  
   if not is_pressed then
     extraction_key_down = false
   end
 end
 
--- Registro de la función de actualización del mundo
-function OnModPreInit()
-  ModLuaFileAppend("data/scripts/gun/gun_actions.lua", "mods/getdata/init.lua")
-end
-
-function OnModInit()
-  ModLuaFileAppend("data/scripts/gun/gun_actions.lua", "mods/getdata/init.lua")
-end
-
-function OnModPostInit()
-  ModLuaFileAppend("data/scripts/gun/gun_actions.lua", "mods/getdata/init.lua")
-end
-
-print("GetData mod loaded successfully")
+-- Registro del callback (asegúrate de que este script se ejecute en un contexto en el que OnWorldPostUpdate sea llamado)
+print("DEBUG: GetData mod loaded successfully")

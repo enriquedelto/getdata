@@ -1,3 +1,5 @@
+print("DEBUG: Loading helper.lua...")
+
 -- Devuelve un número convertido a cadena con espacios a la izquierda hasta alcanzar la longitud especificada.
 -- NOTA: Aunque se va construyendo la cadena, al final se retorna el número original (quizá se esperaba retornar la cadena).
 function pad_number(number, length)
@@ -91,3 +93,20 @@ end
 function aabb_check(x, y, min_x, min_y, max_x, max_y)
 	return x > min_x and x < max_x and y > min_y and y < max_y;
 end
+
+function get_player_entity()
+    return EntityGetWithTag("player_unit")[1]
+end
+
+function get_inventory_items(inventory_type)
+    local player = get_player_entity()
+    if player then
+        local inventory = EntityGetFirstComponent(player, "Inventory" .. inventory_type)
+        if inventory then
+            return ComponentGetValue2(inventory, "mActiveItem"), ComponentGetValue2(inventory, "mItems")
+        end
+    end
+    return nil, nil
+end
+
+print("DEBUG: helper.lua loaded successfully")
