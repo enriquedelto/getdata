@@ -1,8 +1,8 @@
 <Mod
-    name="Extract Player Info"
-    description="Extrae información de la varita activa al pulsar la tecla G."
+    name="GetData"
+    description="Data collection mod"
     author="KAIKE"
     version="1.0"
     request_no_api_restrictions="0">
-    <Script file="init.lua" />
+    <MainScript filepath="init.lua" />
 </Mod>
