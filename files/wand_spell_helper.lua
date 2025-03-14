@@ -1,8 +1,13 @@
-dofile_once("mods/persistence/config.lua");
-dofile_once("mods/persistence/files/helper.lua");
-dofile_once("data/scripts/gun/gun_actions.lua");
-dofile_once("data/scripts/gun/procedural/gun_procedural.lua");
+-- Se cargan las configuraciones y librerías necesarias.
+dofile_once("mods/getdata/files/helper.lua");  -- Funciones auxiliares (obtener jugador, inventarios, etc.).
+dofile_once("data/scripts/gun/gun_actions.lua");  -- Define las acciones que puede tener una varita.
+dofile_once("data/scripts/gun/procedural/gun_procedural.lua");  -- Funciones procedurales para la generación de varitas.
 
+
+--------------------------------------------------------------------------------
+-- Función: wand_type_to_sprite_file
+-- Propósito: Dada una cadena que identifica el tipo de varita, retorna la ruta del sprite asociado.
+-- Si el tipo es "default_X", usa la configuración por defecto; de lo contrario, asume que está en la carpeta de wands.
 function wand_type_to_sprite_file(wand_type)
 	if string.sub(wand_type, 1, #"default") == "default" then
 		local nr = tonumber(string.sub(wand_type, #"default" + 2));
@@ -12,6 +17,12 @@ function wand_type_to_sprite_file(wand_type)
 	end
 end
 
+
+--------------------------------------------------------------------------------
+-- Función: wand_type_to_wand
+-- Propósito: Retorna la definición de la varita asociada a un tipo determinado.
+-- Si es del tipo "default", se retorna el objeto de la configuración por defecto;
+-- de lo contrario, se recorre la lista de varitas existentes (wands) buscando la que coincida.
 function wand_type_to_wand(wand_type)
 	if string.sub(wand_type, 1, #"default") == "default" then
 		local nr = tonumber(string.sub(wand_type, #"default" + 2));
@@ -26,17 +37,36 @@ function wand_type_to_wand(wand_type)
 	end
 end
 
+
+--------------------------------------------------------------------------------
+-- Función: sprite_file_to_wand_type
+-- Propósito: Dado el nombre del archivo del sprite, determina el tipo de varita.
+-- Comprueba si el sprite corresponde a una varita default; si no, extrae el nombre basado en la ruta.
 function sprite_file_to_wand_type(sprite_file)
 	for i = 1, #mod_config.default_wands do
 		if mod_config.default_wands[i].file == sprite_file then
 			return "default_" .. tostring(i);
 		end
 	end
+	-- Extrae el nombre del archivo usando una búsqueda en la cadena (desde la última barra hasta el final, quitando la extensión)
 	return string.sub(sprite_file, string.find(sprite_file, "/[^/]*$") + 1, -5);
 end
 
+
+--------------------------------------------------------------------------------
+-- Función: read_wand
+-- Propósito: Extrae y retorna una tabla con los parámetros de una varita a partir de su entidad.
+-- Recorre los componentes de la entidad y, al encontrar un "AbilityComponent", extrae:
+--   - Configuración del disparo: cantidad de acciones, tiempo de disparo, recarga, etc.
+--   - Parámetros de mana y capacidad.
+--   - El sprite asociado y se determina el tipo de varita.
+-- Además, recorre los hijos de la entidad para identificar las spells:
+--   - Las que están "siempre activas" (permanently_attached) se guardan en always_cast_spells.
+--   - Las demás se guardan en spells.
+-- Ajusta la capacidad restando la cantidad de spells fijas.
 function read_wand(entity_id)
 	local wand_data = {};
+	-- Recorre los componentes de la entidad para obtener el AbilityComponent
 	for _, comp in ipairs(EntityGetAllComponents(entity_id)) do
 		if ComponentGetTypeName(comp) == "AbilityComponent" then
 			wand_data["shuffle"] = tonumber(ComponentObjectGetValue(comp, "gun_config", "shuffle_deck_when_empty")) == 1 and true or false;
@@ -47,18 +77,22 @@ function read_wand(entity_id)
 			wand_data["mana_charge_speed"] = tonumber(ComponentGetValue(comp, "mana_charge_speed"));
 			wand_data["capacity"] = tonumber(ComponentObjectGetValue(comp, "gun_config", "deck_capacity"));
 			wand_data["spread"] = tonumber(ComponentObjectGetValue(comp, "gunaction_config", "spread_degrees"));
+			-- Determina el tipo de varita a partir del sprite asignado
 			wand_data["wand_type"] = sprite_file_to_wand_type(ComponentGetValue(comp, "sprite_file"));
 			break;
 		end
 	end
+	-- Inicializa las listas para spells
 	wand_data["spells"] = {};
 	wand_data["always_cast_spells"] = {};
+	-- Recorre los hijos de la entidad para detectar componentes de acción (spells)
 	local childs = EntityGetAllChildren(entity_id);
 	if childs ~= nil then
 		for _, child_id in ipairs(childs) do
 			local item_action_comp = EntityGetFirstComponentIncludingDisabled(child_id, "ItemActionComponent");
 			if item_action_comp ~= nil and item_action_comp ~= 0 then
 				local action_id = ComponentGetValue(item_action_comp, "action_id");
+				-- Verifica si el spell está permanentemente unido a la varita
 				if tonumber(ComponentGetValue(EntityGetFirstComponentIncludingDisabled(child_id, "ItemComponent"), "permanently_attached")) == 1 then
 					table.insert(wand_data["always_cast_spells"], action_id);
 				else
@@ -67,10 +101,15 @@ function read_wand(entity_id)
 			end
 		end
 	end
+	-- Ajusta la capacidad disponible restando la cantidad de spells que se disparan siempre
 	wand_data["capacity"] = wand_data["capacity"] - #wand_data["always_cast_spells"];
 	return wand_data;
 end
 
+
+--------------------------------------------------------------------------------
+-- Función: read_spell
+-- Propósito: Dada la entidad de un hechizo, retorna su identificador (action_id) leyendo el componente de acción.
 function read_spell(entity_id)
 	for _, comp_id in ipairs(EntityGetAllComponents(entity_id)) do
 		if ComponentGetTypeName(comp_id) == "ItemActionComponent" then
@@ -79,107 +118,18 @@ function read_spell(entity_id)
 	end
 end
 
-function delete_wand(entity_id)
-	if not EntityHasTag(entity_id, "wand") then
-		return;
-	end
-	EntityKill(entity_id);
-end
-
-function delete_spell(entity_id)
-	if not EntityHasTag(entity_id, "card_action") then
-		return;
-	end
-	EntityKill(entity_id);
-end
-
-function create_wand_price(wand_data)
-	local price = 0;
-	if not wand_data["shuffle"] then
-		price = price + 100;
-	end
-	price = price + math.max(wand_data["spells_per_cast"] - 1, 0) * 500;
-	price = price + (0.01 ^ (wand_data["cast_delay"] / 60 - 1.8) + 200) * 0.1;
-	price = price + (0.01 ^ (wand_data["recharge_time"] / 60 - 1.8) + 200) * 0.1;
-	price = price + wand_data["mana_max"];
-	price = price + wand_data["mana_charge_speed"] * 2;
-	price = price + math.max(wand_data["capacity"] - 1, 0) * 50;
-	price = price + math.abs(5 - wand_data["spread"]) * 5;
-	if wand_data["always_cast_spells"] ~= nil and #wand_data["always_cast_spells"] > 0 then
-		for i = 1, #wand_data["always_cast_spells"] do
-			for j = 1, #actions do
-				if actions[j].id == wand_data["always_cast_spells"][i] then
-					price = price + actions[j].price * 5;
-					break;
-				end
-			end
-		end
-	end
-	return math.ceil(price * mod_config.buy_wand_price_multiplier);
-end
-
-function create_wand(wand_data)
-	local price = create_wand_price(wand_data);
-	if get_player_money() < price then
-		return false;
-	end
-
-	local x, y = EntityGetTransform(get_player_id());
-	local entity_id = EntityLoad("mods/persistence/files/wand_empty.xml", x, y);
-	local ability_comp = EntityGetFirstComponentIncludingDisabled(entity_id, "AbilityComponent");
-	local wand = wand_type_to_wand(wand_data["wand_type"]);
-
-	ComponentSetValue(ability_comp, "ui_name", wand.name);
-	ComponentObjectSetValue(ability_comp, "gun_config", "shuffle_deck_when_empty", wand_data["shuffle"] and "1" or "0");
-	ComponentObjectSetValue(ability_comp, "gun_config", "actions_per_round", wand_data["spells_per_cast"]);
-	ComponentObjectSetValue(ability_comp, "gunaction_config", "fire_rate_wait", wand_data["cast_delay"]);
-	ComponentObjectSetValue(ability_comp, "gun_config", "reload_time", wand_data["recharge_time"]);
-	ComponentSetValue(ability_comp, "mana_max", wand_data["mana_max"]);
-	ComponentSetValue(ability_comp, "mana", wand_data["mana_max"]);
-	ComponentSetValue(ability_comp, "mana_charge_speed", wand_data["mana_charge_speed"]);
-	ComponentObjectSetValue(ability_comp, "gun_config", "deck_capacity", wand_data["capacity"]);
-	ComponentObjectSetValue(ability_comp, "gunaction_config", "spread_degrees", wand_data["spread"]);
-	ComponentObjectSetValue(ability_comp, "gunaction_config", "speed_multiplier", 1);
-	ComponentSetValue(ability_comp, "item_recoil_recovery_speed", 15);
-	if #wand_data["always_cast_spells"] > 0 then
-		for i = 1, #wand_data["always_cast_spells"] do
-			AddGunActionPermanent(entity_id, wand_data["always_cast_spells"][i]);
-		end
-	end
-	SetWandSprite(entity_id, ability_comp, wand.file, wand.grip_x, wand.grip_y, (wand.tip_x - wand.grip_x), (wand.tip_y - wand.grip_y));
-
-	set_player_money(get_player_money() - price);
-	return true;
-end
-
-function create_spell_price(action_id)
-	for i = 1, #actions do
-		if actions[i].id == action_id then
-			return math.ceil(actions[i].price * mod_config.buy_spell_price_multiplier);
-		end
-	end
-end
-
-function create_spell(action_id)
-	local price = create_spell_price(action_id);
-	if get_player_money() < price then
-		return false;
-	end
-
-	local x, y = EntityGetTransform(get_player_id());
-	CreateItemActionEntity(action_id, x, y);
-
-	set_player_money(get_player_money() - price);
-	return true;
-end
-
+--------------------------------------------------------------------------------
+-- Función: get_all_wands
+-- Propósito: Retorna una tabla con todas las varitas que se encuentran en el inventario rápido.
+-- Recorre los hijos del inventario "inventory_quick" y verifica que tengan la etiqueta "wand".
+-- Se utiliza el valor del componente "ItemComponent" para ubicar la posición en el inventario.
 function get_all_wands()
 	local wands = {};
 	if get_inventory_quick() == nil then
 		return wands;
 	end
 	local inventory_quick_childs = EntityGetAllChildren(get_inventory_quick());
-	if inventory_quick_childs ~=nil then
+	if inventory_quick_childs ~= nil then
 		for _, item in ipairs(inventory_quick_childs) do
 			if EntityHasTag(item, "wand") then
 				local inventory_comp = EntityGetFirstComponentIncludingDisabled(item, "ItemComponent");
@@ -191,13 +141,17 @@ function get_all_wands()
 	return wands;
 end
 
+--------------------------------------------------------------------------------
+-- Función: get_all_spells
+-- Propósito: Retorna una tabla con todas las entidades de hechizos que se encuentran en el inventario completo.
+-- Recorre los hijos del inventario "inventory_full" y los agrega a la lista.
 function get_all_spells()
 	local spells = {};
 	if get_inventory_full() == nil then
 		return spells;
 	end
 	local inventory_full_childs = EntityGetAllChildren(get_inventory_full());
-	if inventory_full_childs ~=nil then
+	if inventory_full_childs ~= nil then
 		for _, item in ipairs(inventory_full_childs) do
 			table.insert(spells, item);
 		end
