@@ -51,31 +51,27 @@ function read_spell(spell_entity)
     return "unknown"
 end
 
--- Explicitly add all functions to global table
-_G.get_all_wands = get_all_wands
-_G.read_wand = read_wand
-_G.get_all_spells = get_all_spells
-_G.read_spell = read_spell
-
--- Double-check global assignments
-local function verify_globals()
-    if type(_G.get_all_wands) ~= "function" then
-        print("WARNING: get_all_wands not in global scope, reassigning...")
-        _G.get_all_wands = get_all_wands
+-- Assign functions to global table with verification
+local function register_global(name, func)
+    _G[name] = func
+    if _G[name] ~= func then
+        print("WARNING: Failed to register " .. name .. " in global scope")
+        return false
     end
-    if type(_G.read_wand) ~= "function" then
-        _G.read_wand = read_wand
-    end
-    if type(_G.get_all_spells) ~= "function" then
-        _G.get_all_spells = get_all_spells
-    end
-    if type(_G.read_spell) ~= "function" then
-        _G.read_spell = read_spell
-    end
+    return true
 end
 
--- Verify globals after initial assignment
-verify_globals()
-print("DEBUG: Global functions verified in wand_spell_helper.lua")
+-- Register all functions
+local all_ok = true
+all_ok = register_global("get_all_wands", get_all_wands) and all_ok
+all_ok = register_global("read_wand", read_wand) and all_ok
+all_ok = register_global("get_all_spells", get_all_spells) and all_ok
+all_ok = register_global("read_spell", read_spell) and all_ok
+
+if all_ok then
+    print("DEBUG: All functions registered successfully")
+else
+    print("WARNING: Some functions failed to register")
+end
 
 print("DEBUG: wand_spell_helper.lua loaded successfully")

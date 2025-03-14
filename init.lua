@@ -4,54 +4,39 @@
 print("DEBUG: GetData mod loading...")
 GamePrint("DEBUG: GetData mod loading...")
 
--- Usamos rutas relativas (esto es correcto según tu estructura)
-dofile_once("files/helper.lua")
-print("DEBUG: helper.lua loaded")
-dofile_once("files/wand_spell_helper.lua")
-print("DEBUG: wand_spell_helper.lua loaded")
-
 -- Create a local table to store our functions
 local mod = {}
 
 -- Store references to our functions after loading
 function mod.init_functions()
+    -- Load dependencies first
+    dofile_once("files/helper.lua")
+    print("DEBUG: helper.lua loaded")
+    dofile_once("files/wand_spell_helper.lua")
+    print("DEBUG: wand_spell_helper.lua loaded")
+
+    -- Store function references
     mod.get_all_wands = _G.get_all_wands
     mod.read_wand = _G.read_wand
     mod.get_all_spells = _G.get_all_spells
     mod.read_spell = _G.read_spell
     
-    -- Debug print current state
-    print("DEBUG: Function states after init:")
-    print("get_all_wands:", type(mod.get_all_wands))
-    print("read_wand:", type(mod.read_wand))
-    print("get_all_spells:", type(mod.get_all_spells))
-    print("read_spell:", type(mod.read_spell))
+    -- Verify all functions are available
+    local functions_ok = true
+    for name, func in pairs(mod) do
+        if type(func) ~= "function" then
+            print("ERROR: " .. name .. " not loaded properly")
+            functions_ok = false
+        end
+    end
+    
+    return functions_ok
 end
 
--- Call init after loading files
-dofile_once("files/helper.lua")
-dofile_once("files/wand_spell_helper.lua")
-mod.init_functions()
-
--- Verify functions are properly loaded
-if type(get_all_wands) ~= "function" then
-    print("ERROR: get_all_wands not loaded properly")
+-- Initialize functions
+if not mod.init_functions() then
+    GamePrint("WARNING: Some functions failed to load")
 end
-if type(read_wand) ~= "function" then
-    print("ERROR: read_wand not loaded properly")
-end
-if type(get_all_spells) ~= "function" then
-    print("ERROR: get_all_spells not loaded properly")
-end
-if type(read_spell) ~= "function" then
-    print("ERROR: read_spell not loaded properly")
-end
-
--- Verify functions are available
-print("DEBUG: get_all_wands is " .. tostring(type(get_all_wands)))
-print("DEBUG: read_wand is " .. tostring(type(read_wand)))
-print("DEBUG: get_all_spells is " .. tostring(type(get_all_spells)))
-print("DEBUG: read_spell is " .. tostring(type(read_spell)))
 
 -- Definimos la tecla de extracción (código 10 = tecla G)
 local KEY_G = 10
@@ -59,13 +44,11 @@ local extraction_key_down = false
 
 -- Función que extrae la información de las varitas activas y de los hechizos
 function extract_player_info()
-    -- Verify functions are available
+    -- Check if we need to reinitialize
     if type(mod.get_all_wands) ~= "function" then
-        print("ERROR: get_all_wands lost from mod table")
-        mod.init_functions() -- Try to reinitialize
-        if type(mod.get_all_wands) ~= "function" then
-            GamePrint("ERROR: Could not restore get_all_wands function")
-            return "Error: Functions not available"
+        print("WARNING: Functions not available, attempting reinitialization...")
+        if not mod.init_functions() then
+            return "Error: Required functions not available"
         end
     end
 
