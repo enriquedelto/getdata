@@ -10,9 +10,9 @@ local mod = {}
 -- Store references to our functions after loading
 function mod.init_functions()
     -- Load dependencies first
-    dofile_once("files/helper.lua")
+    dofile_once("mods/getdata/files/helper.lua")
     print("DEBUG: helper.lua loaded")
-    dofile_once("files/wand_spell_helper.lua")
+    dofile_once("mods/getdata/files/wand_spell_helper.lua")
     print("DEBUG: wand_spell_helper.lua loaded")
 
     -- Store function references
@@ -23,8 +23,9 @@ function mod.init_functions()
     
     -- Verify all functions are available
     local functions_ok = true
-    for name, func in pairs(mod) do
-        if type(func) ~= "function" then
+    local required_functions = {"get_all_wands", "read_wand", "get_all_spells", "read_spell"}
+    for _, name in ipairs(required_functions) do
+        if type(mod[name]) ~= "function" then
             print("ERROR: " .. name .. " not loaded properly")
             functions_ok = false
         end
@@ -54,21 +55,35 @@ function extract_player_info()
 
     local info = "=== Varitas activas ===\n"
     
+    local player = get_player_entity()
+    if not player then
+        info = info .. "Error: No se encontró el jugador\n"
+        return info
+    end
+    
     local player_wands = mod.get_all_wands()
-    for slot, wand_entity in pairs(player_wands) do
-        local wand_data = mod.read_wand(wand_entity)
-        info = info .. "Slot " .. tostring(slot) .. ":\n"
-        for key, value in pairs(wand_data) do
-            info = info .. "  " .. key .. ": " .. tostring(value) .. "\n"
+    if not player_wands or #player_wands == 0 then
+        info = info .. "No se encontraron varitas\n"
+    else
+        for slot, wand_entity in pairs(player_wands) do
+            local wand_data = mod.read_wand(wand_entity)
+            info = info .. "Slot " .. tostring(slot) .. ":\n"
+            for key, value in pairs(wand_data) do
+                info = info .. "  " .. key .. ": " .. tostring(value) .. "\n"
+            end
+            info = info .. "\n"
         end
-        info = info .. "\n"
     end
     
     info = info .. "=== Hechizos en inventario ===\n"
     local spells = mod.get_all_spells()
-    for i, spell_entity in ipairs(spells) do
-        local spell_id = mod.read_spell(spell_entity)
-        info = info .. "Hechizo " .. tostring(i) .. ": " .. tostring(spell_id) .. "\n"
+    if not spells or #spells == 0 then
+        info = info .. "No se encontraron hechizos\n"
+    else
+        for i, spell_entity in ipairs(spells) do
+            local spell_id = mod.read_spell(spell_entity)
+            info = info .. "Hechizo " .. tostring(i) .. ": " .. tostring(spell_id) .. "\n"
+        end
     end
     
     return info

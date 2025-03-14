@@ -100,13 +100,53 @@ end
 
 function get_inventory_items(inventory_type)
     local player = get_player_entity()
-    if player then
-        local inventory = EntityGetFirstComponent(player, "Inventory" .. inventory_type)
-        if inventory then
-            return ComponentGetValue2(inventory, "mActiveItem"), ComponentGetValue2(inventory, "mItems")
-        end
+    if not player then
+        print("DEBUG: No player entity found")
+        return nil, nil
     end
-    return nil, nil
+
+    -- Get all inventory components
+    local inventory_components = EntityGetComponentIncludingDisabled(player, "Inventory2Component")
+    if not inventory_components then
+        print("DEBUG: No Inventory2Component found")
+        return nil, nil
+    end
+    
+    print("DEBUG: Found " .. #inventory_components .. " inventory components")
+    
+    local function get_inventory_items_from_component(comp)
+        if comp then
+            -- Try to get the items directly from the component
+            local item_list = {}
+            local children = EntityGetAllChildren(player)
+            if children then
+                for _, child_id in ipairs(children) do
+                    -- Check if this child is an item and belongs to this inventory
+                    if EntityHasTag(child_id, "item") then
+                        local inventory_id = tonumber(ComponentGetValue2(comp, "mActiveItem"))
+                        if inventory_id and inventory_id == child_id then
+                            table.insert(item_list, child_id)
+                        end
+                    end
+                end
+            end
+            print("DEBUG: Found " .. #item_list .. " items in inventory")
+            return ComponentGetValue2(comp, "mActiveItem"), item_list
+        end
+        return nil, {}
+    end
+
+    -- Quick inventory is the first one, Full inventory is the second one
+    if inventory_type == "Quick" and #inventory_components > 0 then
+        print("DEBUG: Using first inventory component for Quick inventory")
+        return get_inventory_items_from_component(inventory_components[1])
+    elseif inventory_type == "Full" and #inventory_components > 1 then
+        print("DEBUG: Using second inventory component for Full inventory")
+        return get_inventory_items_from_component(inventory_components[2])
+    end
+    
+    print("DEBUG: No " .. inventory_type .. " inventory component found")
+    return nil, {}
 end
 
 print("DEBUG: helper.lua loaded successfully")

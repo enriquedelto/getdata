@@ -4,5 +4,5 @@
     author="KAIKE"
     version="1.0"
     request_no_api_restrictions="1">
-    <MainScript filepath="init.lua" />
+    <MainScript filepath="mods/getdata/init.lua" />
 </Mod>
