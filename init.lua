@@ -77,11 +77,11 @@ local function extract_wand_info(player)
     return info
 end
 
--- Escribe la información extraída en un archivo usando la función ModTextFileSetContent de file_util.
+-- Escribe la información extraída en un archivo usando ModTextFileSetContent.
 local function export_info(info)
-    local file_path = "mods/getdata/files/player_info.txt"
-    if file_util.ModTextFileSetContent then
-        file_util.ModTextFileSetContent(file_path, info)
+    local file_path = "mods/getdata/files/player_info.csv"
+    if ModTextFileSetContent then
+        ModTextFileSetContent(file_path, info)
         GamePrint("Datos guardados en: " .. file_path)
     else
         GamePrint("[ERROR] No se pudo escribir el archivo.")
