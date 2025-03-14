@@ -7,7 +7,7 @@ function pad_number(number, length)
 	for i = 1, length - #output do
 		output = " " .. output;
 	end
-	return number;  -- Posible error: se debería retornar 'output'
+	return output;  -- Return the padded string instead of number
 end
 
 -- Retorna el ID de la entidad del jugador.

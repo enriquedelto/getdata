@@ -57,4 +57,25 @@ _G.read_wand = read_wand
 _G.get_all_spells = get_all_spells
 _G.read_spell = read_spell
 
+-- Double-check global assignments
+local function verify_globals()
+    if type(_G.get_all_wands) ~= "function" then
+        print("WARNING: get_all_wands not in global scope, reassigning...")
+        _G.get_all_wands = get_all_wands
+    end
+    if type(_G.read_wand) ~= "function" then
+        _G.read_wand = read_wand
+    end
+    if type(_G.get_all_spells) ~= "function" then
+        _G.get_all_spells = get_all_spells
+    end
+    if type(_G.read_spell) ~= "function" then
+        _G.read_spell = read_spell
+    end
+end
+
+-- Verify globals after initial assignment
+verify_globals()
+print("DEBUG: Global functions verified in wand_spell_helper.lua")
+
 print("DEBUG: wand_spell_helper.lua loaded successfully")

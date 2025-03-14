@@ -10,6 +10,29 @@ print("DEBUG: helper.lua loaded")
 dofile_once("files/wand_spell_helper.lua")
 print("DEBUG: wand_spell_helper.lua loaded")
 
+-- Create a local table to store our functions
+local mod = {}
+
+-- Store references to our functions after loading
+function mod.init_functions()
+    mod.get_all_wands = _G.get_all_wands
+    mod.read_wand = _G.read_wand
+    mod.get_all_spells = _G.get_all_spells
+    mod.read_spell = _G.read_spell
+    
+    -- Debug print current state
+    print("DEBUG: Function states after init:")
+    print("get_all_wands:", type(mod.get_all_wands))
+    print("read_wand:", type(mod.read_wand))
+    print("get_all_spells:", type(mod.get_all_spells))
+    print("read_spell:", type(mod.read_spell))
+end
+
+-- Call init after loading files
+dofile_once("files/helper.lua")
+dofile_once("files/wand_spell_helper.lua")
+mod.init_functions()
+
 -- Verify functions are properly loaded
 if type(get_all_wands) ~= "function" then
     print("ERROR: get_all_wands not loaded properly")
@@ -36,26 +59,36 @@ local extraction_key_down = false
 
 -- Función que extrae la información de las varitas activas y de los hechizos
 function extract_player_info()
-  local info = "=== Varitas activas ===\n"
-  
-  local player_wands = get_all_wands()
-  for slot, wand_entity in pairs(player_wands) do
-    local wand_data = read_wand(wand_entity)
-    info = info .. "Slot " .. tostring(slot) .. ":\n"
-    for key, value in pairs(wand_data) do
-      info = info .. "  " .. key .. ": " .. tostring(value) .. "\n"
+    -- Verify functions are available
+    if type(mod.get_all_wands) ~= "function" then
+        print("ERROR: get_all_wands lost from mod table")
+        mod.init_functions() -- Try to reinitialize
+        if type(mod.get_all_wands) ~= "function" then
+            GamePrint("ERROR: Could not restore get_all_wands function")
+            return "Error: Functions not available"
+        end
     end
-    info = info .. "\n"
-  end
-  
-  info = info .. "=== Hechizos en inventario ===\n"
-  local spells = get_all_spells()
-  for i, spell_entity in ipairs(spells) do
-    local spell_id = read_spell(spell_entity)
-    info = info .. "Hechizo " .. tostring(i) .. ": " .. tostring(spell_id) .. "\n"
-  end
-  
-  return info
+
+    local info = "=== Varitas activas ===\n"
+    
+    local player_wands = mod.get_all_wands()
+    for slot, wand_entity in pairs(player_wands) do
+        local wand_data = mod.read_wand(wand_entity)
+        info = info .. "Slot " .. tostring(slot) .. ":\n"
+        for key, value in pairs(wand_data) do
+            info = info .. "  " .. key .. ": " .. tostring(value) .. "\n"
+        end
+        info = info .. "\n"
+    end
+    
+    info = info .. "=== Hechizos en inventario ===\n"
+    local spells = mod.get_all_spells()
+    for i, spell_entity in ipairs(spells) do
+        local spell_id = mod.read_spell(spell_entity)
+        info = info .. "Hechizo " .. tostring(i) .. ": " .. tostring(spell_id) .. "\n"
+    end
+    
+    return info
 end
 
 -- Función para "copiar" el texto al portapapeles con mensajes de debug
