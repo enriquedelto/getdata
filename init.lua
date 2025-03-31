@@ -111,7 +111,15 @@ function extract_player_info()
                 info = info .. string.format("  %-18s %s\n", "Mana Max:", tostring(wand_data.mana_max))
                 info = info .. string.format("  %-18s %s\n", "Mana Charge:", tostring(wand_data.mana_charge_speed))
                 info = info .. string.format("  %-18s %s\n", "Spread (deg):", tostring(wand_data.spread_degrees))
-                info = info .. "\n"
+                if wand_data.spells and #wand_data.spells > 0 then
+                    info = info .. "    Spells:\n"
+                    for idx, spell_info in ipairs(wand_data.spells) do -- Cambiado a spell_info
+                        info = info .. string.format("      %d: %s\n", idx, tostring(spell_info)) -- Usar spell_info
+                    end
+                else
+                    info = info .. "    Spells: (Empty)\n"
+                end
+                info = info .. "\n" -- Línea en blanco existente
             else
                 print("ERROR: mod.read_wand() FAILED for entity " .. wand_entity .. ": " .. tostring(wand_data))
                 info = info .. "Wand " .. i .. ": Error reading data - " .. tostring(wand_data) .. "\n\n"
