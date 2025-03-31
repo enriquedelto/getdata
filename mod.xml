@@ -1,8 +1,8 @@
 <Mod
     name="GetData"
-    description="Data collection mod"
-    author="KAIKE"
-    version="1.0"
+    description="Data collection mod - Press 'G' to copy wand/spell info (Windows Only)"
+    author="KAIKE (Refactored)"
+    version="1.3"
     request_no_api_restrictions="1">
     <MainScript filepath="mods/getdata/init.lua" />
 </Mod>
