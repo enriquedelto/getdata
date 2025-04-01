@@ -1,5 +1,5 @@
--- /files/wand_spell_helper.lua (v2.0 - Lectura de stats base desde archivos)
-print("DEBUG: Loading wand_spell_helper.lua (v2.0 - Reading base stats from files)...")
+-- /files/wand_spell_helper.lua (v2.1 - Corregido error de formato en patrones y añadido mapeo XML)
+print("DEBUG: Loading wand_spell_helper.lua (v2.1 - Fixed pattern format error and added XML mapping)...")
 
 local wand_helper = {}
 
@@ -24,6 +24,8 @@ local function format_action_id(action_id)
     if action_id == nil then return "unknown (No ActionID)" end
     local name = action_id:gsub("_", " "):lower()
     name = name:gsub("(%w)(%w*)", function(c1, rest) return c1:upper() .. rest end)
+     -- Correcciones específicas comunes
+    name = name:gsub("Tier ", "T"):gsub("Bullet", "Bolt") -- Ej: Spitter T2 Timer
     return name
 end
 
@@ -40,6 +42,11 @@ end
 -- Lee y parsea un archivo XML, manejando la herencia <Base>
 local function parse_xml_with_inheritance(filepath, visited_files)
     visited_files = visited_files or {} -- Evitar bucles infinitos de herencia
+    -- Verificar si el path es válido antes de proceder
+    if not filepath or type(filepath) ~= "string" or filepath == "" then
+         print("WARN: Invalid filepath provided to parse_xml_with_inheritance: "..tostring(filepath))
+         return nil, {}
+    end
     if visited_files[filepath] then
         print("WARN: Circular inheritance detected for XML file: " .. filepath)
         return nil, {} -- Devolver tabla vacía para stats base en caso de bucle
@@ -47,9 +54,10 @@ local function parse_xml_with_inheritance(filepath, visited_files)
     visited_files[filepath] = true
 
     -- Leer archivo
-    local xml_content = ModTextFileGetContent(filepath)
-    if not xml_content then
-        print("WARN: Failed to read XML file: " .. filepath)
+    -- Usar pcall aquí también por si ModTextFileGetContent falla
+    local read_ok, xml_content = pcall(ModTextFileGetContent, filepath)
+    if not read_ok or not xml_content then
+        print("WARN: Failed to read XML file: " .. filepath .. (read_ok and "" or " Error: "..tostring(xml_content)))
         return nil, {}
     end
 
@@ -66,146 +74,144 @@ local function parse_xml_with_inheritance(filepath, visited_files)
     -- Manejar herencia
     local base_tag = xml_root:first_of("Base")
     if base_tag and base_tag.attr and base_tag.attr.file then
-        -- Normalizar path (asumir que está relativo a data/)
         local base_filepath = base_tag.attr.file
-        -- print("DEBUG: Found base tag in "..filepath..", parsing base file: "..base_filepath)
-        local base_root, recursive_base_stats = parse_xml_with_inheritance(base_filepath, visited_files)
-        -- Usar las stats mergeadas de la base recursiva
+        -- Recursivamente parsear la base y obtener sus stats finales mergeadas
+        local _, recursive_base_stats = parse_xml_with_inheritance(base_filepath, visited_files)
         base_stats = recursive_base_stats
     end
 
     -- Extraer stats del XML ACTUAL (sobrescribirán las de la base)
-    -- Mana/Uses no suelen estar aquí, pero los buscamos por si acaso
     local ability_comp = xml_root:first_of("AbilityComponent")
     if ability_comp then
         local gunaction_cfg = ability_comp:first_of("gunaction_config")
         if gunaction_cfg and gunaction_cfg.attr then
-            if gunaction_cfg.attr.action_mana_drain then current_stats.mana_drain = tonumber(gunaction_cfg.attr.action_mana_drain) end
-            if gunaction_cfg.attr.action_max_uses then current_stats.uses = tonumber(gunaction_cfg.attr.action_max_uses) end
-            if gunaction_cfg.attr.damage_critical_chance then current_stats.crit_chance = tonumber(gunaction_cfg.attr.damage_critical_chance) * 100 end
-            -- Guardar el path del proyectil si se encuentra aquí
-            if gunaction_cfg.attr.projectile_file and gunaction_cfg.attr.projectile_file ~= "" then current_stats.projectile_file = gunaction_cfg.attr.projectile_file end
-             if gunaction_cfg.attr.entity_file and gunaction_cfg.attr.entity_file ~= "" then current_stats.projectile_file = gunaction_cfg.attr.entity_file end -- A veces se usa entity_file
+            current_stats.mana_drain = tonumber(gunaction_cfg.attr.action_mana_drain)
+            current_stats.uses = tonumber(gunaction_cfg.attr.action_max_uses)
+            current_stats.crit_chance = (tonumber(gunaction_cfg.attr.damage_critical_chance) or 0) * 100
+            current_stats.projectile_file = gunaction_cfg.attr.projectile_file or gunaction_cfg.attr.entity_file
         end
     end
 
-    -- Extraer daños del ProjectileComponent
     local projectile_comp = xml_root:first_of("ProjectileComponent")
-    if projectile_comp and projectile_comp.attr then
-        if projectile_comp.attr.damage then current_stats.damage_projectile = tonumber(projectile_comp.attr.damage) end
-        -- Buscar daños específicos si existen
+    if projectile_comp then
+        if projectile_comp.attr then
+             current_stats.damage_projectile = tonumber(projectile_comp.attr.damage)
+        end
         local damage_by_type = projectile_comp:first_of("damage_by_type")
         if damage_by_type and damage_by_type.attr then
              current_stats.damage_fire = tonumber(damage_by_type.attr.fire or 0)
              current_stats.damage_ice = tonumber(damage_by_type.attr.ice or 0)
              current_stats.damage_electricity = tonumber(damage_by_type.attr.electricity or 0)
              current_stats.damage_slice = tonumber(damage_by_type.attr.slice or 0)
-             current_stats.damage_melee = tonumber(damage_by_type.attr.melee or 0) -- Aunque raro en projectile
+             current_stats.damage_melee = tonumber(damage_by_type.attr.melee or 0)
              current_stats.damage_drill = tonumber(damage_by_type.attr.drill or 0)
              current_stats.damage_healing = tonumber(damage_by_type.attr.healing or 0)
              current_stats.damage_curse = tonumber(damage_by_type.attr.curse or 0)
         end
-        -- Guardar el path del proyectil si se encuentra aquí y no se encontró antes
-         if not current_stats.projectile_file and projectile_comp.attr.projectile_file and projectile_comp.attr.projectile_file ~= "" then current_stats.projectile_file = projectile_comp.attr.projectile_file end
-         if not current_stats.projectile_file and projectile_comp.attr.entity_file and projectile_comp.attr.entity_file ~= "" then current_stats.projectile_file = projectile_comp.attr.entity_file end
+        local explosion_config = projectile_comp:first_of("config_explosion")
+        if explosion_config and explosion_config.attr and explosion_config.attr.damage then
+            current_stats.damage_explosion = tonumber(explosion_config.attr.damage)
+        end
+        -- Actualizar projectile_file si se encuentra aquí y no antes
+         if not current_stats.projectile_file then current_stats.projectile_file = projectile_comp.attr.projectile_file or projectile_comp.attr.entity_file end
     end
 
-     -- Extraer daño de explosión
-    local explosion_config = xml_root:first_of("config_explosion") -- A veces está fuera de ProjectileComponent
-    if not explosion_config and projectile_comp then explosion_config = projectile_comp:first_of("config_explosion") end -- O dentro
-    if explosion_config and explosion_config.attr and explosion_config.attr.damage then
-        current_stats.damage_explosion = tonumber(explosion_config.attr.damage)
-    end
+    local explosion_comp_direct = xml_root:first_of("ExplosionComponent")
+     if explosion_comp_direct then
+          local exp_cfg_direct = explosion_comp_direct:first_of("config_explosion")
+          if exp_cfg_direct and exp_cfg_direct.attr and exp_cfg_direct.attr.damage then
+               if not current_stats.damage_explosion or current_stats.damage_explosion == 0 then
+                    current_stats.damage_explosion = tonumber(exp_cfg_direct.attr.damage)
+               end
+          end
+     end
 
-    -- Mergear stats actuales sobre las base
     local final_stats = merge_tables(base_stats, current_stats)
-
     return xml_root, final_stats
 end
 
 -- Función principal para obtener stats base (usa cache)
 function wand_helper.get_base_spell_stats(action_id)
     if not action_id then return nil end
-    -- 1. Verificar Cache
-    if wand_helper.base_spell_stats_cache[action_id] then
-        return wand_helper.base_spell_stats_cache[action_id]
-    end
-
-    -- Asegurarse de que nxml está cargado
-    if not nxml_ok then return nil end
+    if wand_helper.base_spell_stats_cache[action_id] then return wand_helper.base_spell_stats_cache[action_id] end
+    if not nxml_ok then print("WARN: LuaNXML not loaded, cannot fetch base stats for " .. action_id); return nil end
 
     local stats = {
-        action_id = action_id,
-        formatted_name = format_action_id(action_id),
+        action_id = action_id, formatted_name = format_action_id(action_id),
         mana_drain = nil, uses = nil, crit_chance = nil,
         damage_projectile = 0, damage_explosion = 0, damage_fire = 0, damage_ice = 0, damage_electricity = 0, damage_slice = 0, damage_melee = 0, damage_drill = 0, damage_healing = 0, damage_curse = 0,
         projectile_file = nil
     }
 
-    -- 2. Leer de gun_actions.lua (Mana/Uses) - ¡Frágil!
+    -- Leer de gun_actions.lua (Mana/Uses)
     if not gun_actions_content_cache then
-        gun_actions_content_cache = ModTextFileGetContent("data/scripts/gun/gun_actions.lua")
+        local read_ok, content = pcall(ModTextFileGetContent, "data/scripts/gun/gun_actions.lua")
+        if read_ok and content then gun_actions_content_cache = content else print("WARN: Could not read data/scripts/gun/gun_actions.lua. Error: " .. tostring(content)); gun_actions_content_cache = "" end
     end
-    if gun_actions_content_cache then
-         -- Intentar patrones más flexibles
-        local pattern1 = string.format('action_id = "%s".-%saction_mana_drain = (%d*%.?%d*),.-action_max_uses = (%-?%d+)', action_id, "\n", "\n")
-        local pattern2 = string.format('%s = {.-action_mana_drain = (%d*%.?%d*),.-action_max_uses = (%-?%d+)', action_id) -- Si está en una línea
+    if gun_actions_content_cache ~= "" then
+        -- *** Patrones Corregidos v2.1 ***
+        local pattern1 = 'action_id = "' .. action_id .. '".-\n.-action_mana_drain = (%d*%.?%d*),.-\n.-action_max_uses = (%-?%d+)'
+        local pattern2 = action_id .. '%s*=%s*{%s*.-action_mana_drain%s*=%s*(%d*%.?%d*),.-action_max_uses%s*=%s*(%-?%d+)' -- Patrón más robusto para { }
 
         local drain_str, uses_str = string.match(gun_actions_content_cache, pattern1)
         if not drain_str then drain_str, uses_str = string.match(gun_actions_content_cache, pattern2) end
 
+        -- Si aún no se encuentra, intentar buscar asignaciones directas separadas (menos común)
+        if not drain_str then drain_str = string.match(gun_actions_content_cache, action_id .. '%s*%.%s*action_mana_drain%s*=%s*(%d*%.?%d*)') end
+        if not uses_str then uses_str = string.match(gun_actions_content_cache, action_id .. '%s*%.%s*action_max_uses%s*=%s*(%-?%d+)') end
+
         if drain_str then stats.mana_drain = tonumber(drain_str) end
         if uses_str then stats.uses = tonumber(uses_str) end
-        -- print("DEBUG: gun_actions.lua read for "..action_id..": mana="..tostring(stats.mana_drain).." uses="..tostring(stats.uses))
-    else
-        print("WARN: Could not read data/scripts/gun/gun_actions.lua")
     end
 
-    -- 3. Determinar y leer XML de acción/proyectil
-    -- Necesitamos un mapeo mejor o lógica para encontrar el archivo correcto.
-    -- Ejemplo simple (necesita expansión):
-    local xml_path = nil
-    if action_id == "BOMB" then xml_path = "data/entities/items/actions/bomb.xml" -- El item BOMB tiene su propio AbilityComp
-    elseif action_id == "SPITTER" then xml_path = "data/entities/projectiles/deck/spitter.xml" -- Asumiendo que el proyectil define más
-    elseif action_id == "LIGHT_BULLET" then xml_path = "data/entities/projectiles/deck/light_bullet.xml"
-    elseif action_id == "BOUNCY_ORB" then xml_path = "data/entities/projectiles/deck/bouncy_orb.xml"
-    -- Añadir más mapeos aquí para otros hechizos...
-    -- O intentar derivar el path: string.format("data/entities/projectiles/deck/%s.xml", string.lower(action_id)) - esto falla a menudo
+    -- Determinar y leer XML usando el mapeo
+    local xml_path = action_id_to_xml_map[action_id]
+
+    if not xml_path then
+         -- Intentar derivar path genérico si no está en el mapa
+         local derived_path_proj = string.format("data/entities/projectiles/deck/%s.xml", string.lower(action_id))
+         local derived_path_action = string.format("data/entities/items/actions/%s.xml", string.lower(action_id))
+         
+         local check_ok_proj, _ = pcall(ModTextFileGetContent, derived_path_proj)
+         if check_ok_proj then
+             xml_path = derived_path_proj
+             -- print("DEBUG: Derived XML path (proj): " .. xml_path)
+         else
+             local check_ok_action, _ = pcall(ModTextFileGetContent, derived_path_action)
+             if check_ok_action then
+                 xml_path = derived_path_action
+                 -- print("DEBUG: Derived XML path (action): " .. xml_path)
+             end
+         end
     end
 
     if xml_path then
         local _, xml_stats = parse_xml_with_inheritance(xml_path)
-        -- Sobrescribir/añadir stats del XML (priorizando las del XML si existen)
-        stats = merge_tables(stats, xml_stats)
-        -- print("DEBUG: XML stats merged for "..action_id..": crit="..tostring(stats.crit_chance).." proj_dmg="..tostring(stats.damage_projectile))
+        stats = merge_tables(stats, xml_stats) -- Mergear stats del XML (daños, etc.)
     else
-        print("WARN: No XML path defined or derived for action_id: " .. action_id)
+        print("WARN: No XML path found in map or derived for action_id: " .. action_id)
     end
 
-    -- 4. Cachear y devolver
+    -- Cachear y devolver
     wand_helper.base_spell_stats_cache[action_id] = stats
     return stats
 end
 
--- Funciones anteriores (simplificadas para no usar el caché viejo)
+-- --- Resto de funciones (read_spell_name_and_id, get_all_wands, read_wand, get_inventory_spell_info) ---
 function wand_helper.read_spell_name_and_id(spell_entity)
-    -- ... (igual que v1.8) ...
     local result = { name = "unknown", id = nil }
     if not EntityGetIsAlive(spell_entity) then result.name = "unknown (Entity Dead)"; return result end
-    local spell_ability_comp = EntityGetFirstComponentIncludingDisabled(spell_entity, "AbilityComponent")
-    if spell_ability_comp then local ui_name_ability = ComponentGetValue2(spell_ability_comp, "ui_name"); if ui_name_ability and ui_name_ability ~= "" and ui_name_ability:sub(1,1) == "$" then result.name = ui_name_ability; local iac = EntityGetFirstComponentIncludingDisabled(spell_entity, "ItemActionComponent"); if iac then result.id = ComponentGetValue2(iac, "action_id") end; return result end end
+    local spell_ability_comp = EntityGetFirstComponentIncludingDisabled(spell_entity, "AbilityComponent"); if spell_ability_comp then local ui_name_ability = ComponentGetValue2(spell_ability_comp, "ui_name"); if ui_name_ability and ui_name_ability ~= "" and ui_name_ability:sub(1,1) == "$" then result.name = ui_name_ability; local iac = EntityGetFirstComponentIncludingDisabled(spell_entity, "ItemActionComponent"); if iac then result.id = ComponentGetValue2(iac, "action_id") end; return result end end
     local item_action_comp = EntityGetFirstComponentIncludingDisabled(spell_entity, "ItemActionComponent"); if item_action_comp then local action_id = ComponentGetValue2(item_action_comp, "action_id"); if action_id and action_id ~= "" then result.id = action_id; result.name = format_action_id(action_id); local item_comp = EntityGetFirstComponentIncludingDisabled(spell_entity, "ItemComponent"); if item_comp then local iname = ComponentGetValue2(item_comp, "item_name"); if iname and iname ~= "" then result.name = iname; return result end; local uiname = ComponentGetValue2(item_comp, "ui_name"); if uiname and uiname ~= "" then result.name = uiname; return result end end; return result else result.name = "unknown (Empty ActionID)" end end
     local item_comp_fallback = EntityGetFirstComponentIncludingDisabled(spell_entity, "ItemComponent"); if item_comp_fallback then local iname = ComponentGetValue2(item_comp_fallback, "item_name"); if iname and iname ~= "" then result.name = iname; return result end; local uiname = ComponentGetValue2(item_comp_fallback, "ui_name"); if uiname and uiname ~= "" then result.name = uiname; return result end; result.name = "unknown (No ActionID, ItemComp names empty)"; return result end
     result.name = "unknown (No Action/Item/Ability Comp)"; return result
 end
 
 function wand_helper.get_all_wands()
-    -- ... (igual que v1.8) ...
     local all_items = get_items_func(); local wands = {}; for _, item_id in ipairs(all_items) do if EntityGetIsAlive(item_id) and EntityHasTag(item_id, "wand") then table.insert(wands, item_id) end end; return wands
 end
 
 function wand_helper.read_wand(wand_entity)
-    -- ... (igual que v1.8 pero SIN poblar el caché de stats detalladas) ...
     local wand_data = {}; wand_data["ui_name"] = "Unknown Wand"; wand_data["shuffle"] = "N/A"; wand_data["capacity"] = 0; wand_data["spells_per_cast"] = 0; wand_data["cast_delay"] = "0.00"; wand_data["recharge_time"] = "0.00"; wand_data["mana_max"] = 0; wand_data["mana_charge_speed"] = 0; wand_data["mana"] = 0; wand_data["spread_degrees"] = "0.00"; wand_data["spells"] = {}
     if not EntityGetIsAlive(wand_entity) then wand_data["ui_name"] = "Unknown Wand (Entity Dead)"; return wand_data end
     local ability_comp = EntityGetFirstComponentIncludingDisabled(wand_entity, "AbilityComponent"); if not ability_comp then local ic = EntityGetFirstComponentIncludingDisabled(wand_entity, "ItemComponent"); if ic then wand_data["ui_name"] = ComponentGetValue2(ic, "ui_name") or ComponentGetValue2(ic, "item_name") or "UW(NoAC)" else wand_data["ui_name"] = "UW(NoAC/IC)" end; return wand_data end
@@ -217,14 +223,9 @@ function wand_helper.read_wand(wand_entity)
 end
 
 function wand_helper.get_inventory_spell_info()
-    -- ... (igual que v1.8) ...
     local all_inventory_items = get_items_func(); local spell_info_list = {}; if not all_inventory_items or #all_inventory_items == 0 then return spell_info_list end; for _, item_id in ipairs(all_inventory_items) do if EntityHasTag(item_id, "card_action") and not EntityHasTag(item_id, "wand") then local spell_info = wand_helper.read_spell_name_and_id(item_id); table.insert(spell_info_list, spell_info) end end; return spell_info_list
 end
 
--- Ya no necesitamos estas:
--- wand_helper.clear_spell_cache = function() wand_helper.base_spell_stats_cache = {} end
--- wand_helper.get_cached_spell_stats = function() return wand_helper.base_spell_stats_cache end
-
-print("DEBUG: wand_spell_helper.lua loaded successfully (v2.0)")
+print("DEBUG: wand_spell_helper.lua loaded successfully (v2.1)")
 
 return wand_helper
